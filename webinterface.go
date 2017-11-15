@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"flag"
 	"sync"
-	//"time"
+	"time"
 	"errors"
 	"strings"
 	"strconv"
@@ -184,39 +184,25 @@ func initializeInterupt(threadcount int, serverlistChannel chan string) (<-chan 
 func main() {
 	logger.Initialize()
 
-	//WriteJsonFile(time.Now(), "/tmp/test/time")
-	//logger.Info(time.Now())
-	//logger.Info("starting test")
-	//logger.Info(LoadChannelsFromPath("/tmp/test"))
+	WriteJsonFile(time.Now(), "/tmp/test/time")
+	logger.Info(time.Now())
+	logger.Info("starting test")
+	logger.Info(LoadChannelsFromPath("/tmp/test"))
 
 	//Parse the flags/arguments to the properties
 	flag.Parse()
 	InitializeConfiguration(*ConfigurationPath)
 	logger.SetDebugState(CurrentConfiguration.Debug)
 
-	initializeApi()
 	http.HandleFunc("/status", handleStatus)
 	http.HandleFunc("/favicon.ico", handleFavicon)
         http.HandleFunc("/", httpHandler)
 
+	logger.Info("Listening on port: " + strconv.Itoa(CurrentConfiguration.TlsPort) + " (https)")
+	tlserr := http.ListenAndServeTLS(":" + strconv.Itoa(CurrentConfiguration.TlsPort), CurrentConfiguration.TlsCert, CurrentConfiguration.TlsKey, nil)
 
-
-	if CurrentConfiguration.HttpTlsPort != 0 {
-		logger.Info("Listening on port: " + strconv.Itoa(CurrentConfiguration.HttpTlsPort) + " (https)")
-		tlserr := http.ListenAndServeTLS(":" + strconv.Itoa(CurrentConfiguration.HttpTlsPort), CurrentConfiguration.HttpTlsCert, CurrentConfiguration.HttpTlsKey, nil)
-		if tlserr != nil {
-			logger.Error("Error starting TLS: ",tlserr)
-		}
-
-	}
-
-
-	if CurrentConfiguration.HttpPort != 0 {
-		logger.Info("Listening on port: " + strconv.Itoa(CurrentConfiguration.HttpPort) + " (http)")
-		err := http.ListenAndServe(":" + strconv.Itoa(CurrentConfiguration.HttpPort),nil)
-		if err != nil {
-			logger.Error("Error starting http: ", err)
-		}
+	if tlserr != nil {
+		logger.Error("Error starting TLS: ",tlserr)
 	}
 
 	logger.Error("Error happend while serving website")

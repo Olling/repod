@@ -1,4 +1,4 @@
-package conf
+package main
 
 import (
 	"os"
@@ -14,9 +14,10 @@ type Configuration struct {
 	PathWork string
 	PathConfiguration string
 	PathLog string
-	TlsCert string
-	TlsKey string
-	TlsPort int
+	HttpPort int
+	HttpTlsCert string
+	HttpTlsKey string
+	HttpTlsPort int
 	Debug bool
 	Timeout int
 }
