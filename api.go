@@ -10,12 +10,22 @@ func httpApiChannels(w http.ResponseWriter, r *http.Request) {
 	logger.Debug("Api: Channels called")
         switch r.Method {
                 case "GET":
-			httpGet(w,r)
+			httpApiGet(w,r)
 		case "DELETE":
-			httpDelete(w,r)
+			httpApiDelete(w,r)
                 case "POST":
-                        httpPost(w,r)
+                        httpApiPost(w,r)
         }
+}
+
+func httpApiGet(w http.ResponseWriter, r *http.Request) {
+	logger.Debug("API called with GET", r.URL.Path)
+}
+func httpApiPost(w http.ResponseWriter, r *http.Request) {
+	logger.Debug("API called with POST", r.URL.Path)
+}
+func httpApiDelete(w http.ResponseWriter, r *http.Request) {
+	logger.Debug("API called with Delete", r.URL.Path)
 }
 
 func httpApiHandler(w http.ResponseWriter, r *http.Request) {

@@ -2,9 +2,12 @@ package main
 
 import (
 	"os"
-	"time"
+	"flag"
 	"sync"
+	"time"
+	"strings"
 	"io/ioutil"
+	"path/filepath"
 	"encoding/json"
 	"github.com/olling/logger"
 )
@@ -27,32 +30,25 @@ type Action struct {
 	Name string
 	Cron string
 	Description string
-	channels []Channel
-	actions []Action
+	children []Action
 	Command string
 	Timeout int
 	LastRun time.Time
 	Enabled bool
-}
-
-type Channel struct {
-	FriendlyName string
-	Name string
-	Cron string
-	Description string
-	Channels []Channel
-	Actions []Action
+	fileName string
 }
 
 var (
+	ConfigurationPath = flag.String("configurationpath","/etc/repod/repod.conf","(Optional) The path to the configuration file")
         outputMutex sync.Mutex
 	CurrentConfiguration Configuration
 )
 
-func InitializeConfiguration(path string) {
+func InitializeConfiguration() {
 	logger.Debug("Initializing configuration")
-	logger.Debug("Configuration Path: " + path)
-	err := ReadJsonFile(path,&CurrentConfiguration)
+	flag.Parse()
+	logger.Debug("Configuration Path: " + *ConfigurationPath)
+	err := ReadJsonFile(*ConfigurationPath,&CurrentConfiguration)
 
         if err != nil {
                 logger.Error("Error while reading the configuration file - Exiting")
@@ -63,52 +59,82 @@ func InitializeConfiguration(path string) {
 	logger.Debug("Done initializing configuration")
 }
 
-func LoadChannelsFromPath(path string) (outputChannel Channel,err error) {
+//func LoadChannelWithoutChildrenFromPath(path string) (outputChannel Channel,err error) {
+//	err = ReadJsonFile(path + "/channel_info",&outputChannel)
+//	return outputChannel,err
+//}
+
+
+func (action *Action) GetDirName () (dirName string) {
+	dirName = strings.TrimSuffix(action.fileName,filepath.Ext(action.fileName))
+	return dirName
+}
+
+
+func LoadActionsFromPath(path string) (actions []Action, err error) {
+	logger.Debug("LoadActionsFromPath(" + path + ")")
 	items, err := ioutil.ReadDir(path)
 
 	if err != nil {
-		logger.Debug(err)
-		return outputChannel,err
+		return actions,err
 	}
 
 	for _, item := range items {
 		logger.Debug("Reading path:",item.Name())
 
-		if item.Name() == "channel_info" {
-			continue
-		}
-
-		if item.IsDir() {
-			var c Channel
-			err := ReadJsonFile(path + "/" + item.Name() + "/channel_info",&c)
-			if err != nil {
-				logger.Error("Could not get Channel info from:", path + "/" + item.Name() + "/channel_info", err)
-			}
-
-			child,loaderr := LoadChannelsFromPath(path + "/" + item.Name())
-			if loaderr != nil {
-				logger.Error("Could not get children from:",path + "/" + item.Name(),loaderr)
-			}
-			c.Channels = child.Channels
-			c.Actions = child.Actions
-
-			outputChannel.Channels = append(outputChannel.Channels,c)
-		} else {
+		if item.IsDir() == false {
+			fullPath :=path + "/" + item.Name()
+			logger.Debug("Trying to get action from:", item.Name())
 			var a Action
-			err := ReadJsonFile(path + "/" + item.Name(),&a)
+			a.fileName = item.Name()
+			err := ReadJsonFile(fullPath,&a)
                         if err != nil {
-                                logger.Error("Could not get Action info from:", path + "/" + item.Name(), err)
+                                logger.Error("Could not get info from:", fullPath, err)
                         }
 
-                        outputChannel.Actions = append(outputChannel.Actions,a)
+			pathChildren := strings.TrimSuffix(fullPath,filepath.Ext(fullPath))
+			_, err = os.Stat(fullPath)
+			if err != nil && os.IsNotExist(err) {
+				logger.Debug("Could not find the action children directory:",pathChildren)
+			} else {
+				logger.Debug("Reading children from: ", pathChildren)
+				children,_ := LoadActionsFromPath(pathChildren)
+				a.children = append(a.children, children...)
+			}
+			actions = append(actions, a)
 		}
 	}
-	return outputChannel,nil
+	return actions,nil
 }
 
+
+
 func LoadActionFromPath(path string) (action Action,err error) {
+	logger.Debug("LoadActionFromPath(" + path + ")")
+
+	err = ReadJsonFile(path,&action)
+
+	if err != nil {
+		logger.Error("Could not load json from:", path, err)
+		return action,err
+	}
+
+	pathChildren := strings.TrimSuffix(path,filepath.Ext(path))
+	_, err = os.Stat(path)
+	if err != nil && os.IsNotExist(err) {
+		logger.Debug("Could not find the action children directory:",pathChildren)
+	} else {
+		logger.Debug("Reading children from: ", pathChildren)
+		children,_ := LoadActionsFromPath(pathChildren)
+		action.children = children
+	}
+
+	return action,nil
+}
+
+func LoadActionWithoutChildrenFromPath(path string) (action Action,err error) {
 	logger.Debug("Reading action from", path)
-	err = ReadJsonFile(path,action)
+	err = ReadJsonFile(path,&action)
 	return action, err
 }
 
@@ -133,7 +159,7 @@ func ReadJsonFile (path string, output interface{}) (error) {
 
 
 func WriteJsonFile(s interface{}, path string) (err error){
-	logger.Debug("Writing to path: " + path, "content:", s) 
+	logger.Debug("Writing to path: " + path, "content:", s)
         outputMutex.Lock()
         defer outputMutex.Unlock()
 

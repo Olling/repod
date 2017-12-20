@@ -3,45 +3,14 @@ package main
 import (
 	"os"
 	"fmt"
-	"flag"
-	"sync"
-	"time"
-	"errors"
+	//"time"
 	"strings"
 	"strconv"
-	"os/exec"
 	"net/http"
-	"io/ioutil"
-	"os/signal"
+//	"io/ioutil"
 	"github.com/olling/logger"
 	//"github.com/olling/repod/conf"
 )
-
-
-var (
-	ConfigurationPath = flag.String("configurationpath","/etc/repod/repod.conf","(Optional) The path to the configuration file")
-)
-
-
-func runScript(a Action) (err error) {
-	logger.Debug("Calling ActionChild: ", a)
-
-	if a.Enabled == false {
-		logger.Error("The ActionChild is disabled")
-		return errors.New("The ActionChild is disabled and will not be executed")
-	}
-
-	cmd := exec.Command("/bin/bash", "-c", a.Command)
-	output, err := cmd.CombinedOutput()
-
-	if err != nil {
-		logger.Error(err)
-		return err
-	}
-
-	logger.Debug("Script output:", string(output))
-	return err
-}
 
 
 func httpDelete(w http.ResponseWriter, r *http.Request) {
@@ -54,8 +23,8 @@ func httpGet(w http.ResponseWriter, r *http.Request) {
 	logger.Debug("GET url=" + r.URL.Path)
 
 	if strings.Contains(r.URL.Path, "robots.txt") {
-		logger.Debug("robots.txt ignored")
-		fmt.Fprint(w,"Robots are not allowed")
+		logger.Debug("robots.txt ignored for now")
+		fmt.Fprint(w,"Robots are not allowed - yet")
 		return
 	}
 
@@ -96,29 +65,43 @@ func httpGetFile(w http.ResponseWriter, r *http.Request, path string) {
 
 
 func httpGetDirectory(w http.ResponseWriter, r *http.Request) {
-	files, err := ioutil.ReadDir(CurrentConfiguration.PathWork + r.URL.Path)
-	if err != nil {
-		fmt.Println(err)
+	prefix := ""
+	if r.URL.Path != "/" {
+		prefix = r.URL.Path
 	}
 
 	fmt.Fprintln(w,"<!DOCTYPE html>")
 	fmt.Fprintln(w,"<html>")
 	fmt.Fprintln(w,"<body>")
 
-	for _, file := range files {
-		prefix := ""
-		if r.URL.Path != "/" {
-			prefix = r.URL.Path
-		}
+	path := CurrentConfiguration.PathWork + prefix
+	fileinfo,err := os.Stat(path)
 
-		uri := prefix + "/" + file.Name()
-		if file.IsDir() {
-			fmt.Fprintln(w,"<a href=" + uri + ">" + file.Name() + "</a></br>")
-		} else {
-			fmt.Fprintln(w,file.Name() + " <a href=" + uri + ">View</a> <a href=" + uri + "?edit>Edit</a> <a href=" + uri + "?delete>Delete</a></br>")
-		}
+	if err != nil {
+		logger.Error("Could not stat file", path, err)
 	}
 
+	if fileinfo.IsDir() {
+			actions,_ := LoadActionsFromPath(path)
+			logger.Debug(actions)
+			for _, action := range actions {
+				uri := prefix + "/"  + action.fileName
+
+
+				dirName := action.GetDirName()
+				var children string
+				if dirName == "" || len(action.children) == 0 {
+					children = ""
+				} else {
+					children = " <a href=" + dirName + ">Children</a>"
+				}
+				fmt.Fprintln(w,action.FriendlyName + " <a href=" + uri + ">View</a>" + children + " <a href=" + uri + "?edit>Edit</a> <a href=" + uri + "?delete>Delete</a></br>")
+			}
+		} else {
+			action,_ := LoadActionFromPath(path)
+			uri := prefix + "/"  + action.fileName
+			fmt.Fprintln(w,action.FriendlyName + " <a href=" + uri + ">View</a> <a href=" + uri + "?edit>Edit</a> <a href=" + uri + "?delete>Delete</a></br>")
+		}
 	fmt.Fprintln(w,"</body>")
 	fmt.Fprintln(w,"</html>")
 }
@@ -143,67 +126,28 @@ func httpHandler(w http.ResponseWriter, r *http.Request) {
 func handleFavicon(w http.ResponseWriter, r *http.Request) {}
 func handleStatus(w http.ResponseWriter, r *http.Request) {fmt.Fprint(w,"Running")}
 
-func initializeInterupt(threadcount int, serverlistChannel chan string) (<-chan os.Signal, *sync.WaitGroup) {
-	//To catch an interupt by the user
-	interruptChannel := make(chan os.Signal, 1)
 
-	//A channel to tell the threads to stop what they are doing
-	killthreadsChannel := make(chan os.Signal, 1)
-
-	//A wait group to wait for all of the threads to stop
-	var interruptWaitGroup sync.WaitGroup
-	interruptWaitGroup.Add(threadcount)
-
-	//Catch user interrupt
-	signal.Notify(interruptChannel, os.Interrupt)
-	go func(){
-	    for sig := range interruptChannel {
-		logger.Error("Program was interrupted")
-
-		//Empty the work list
-		for server := range serverlistChannel {
-			logger.Error("Removing the following server from the queue:", server)
-		}
-
-		//Tell the threads to interrupt
-		for a := 1; a <= threadcount; a++ {
-			killthreadsChannel <-sig
-		}
-
-		//Wait for all the groups to stop
-		interruptWaitGroup.Wait()
-
-		//Exit
-		os.Exit(1)
-	    }
-	}()
-	return killthreadsChannel, &interruptWaitGroup
-}
-
-
-func main() {
-	logger.Initialize()
-
-	WriteJsonFile(time.Now(), "/tmp/test/time")
-	logger.Info(time.Now())
-	logger.Info("starting test")
-	logger.Info(LoadChannelsFromPath("/tmp/test"))
-
-	//Parse the flags/arguments to the properties
-	flag.Parse()
-	InitializeConfiguration(*ConfigurationPath)
-	logger.SetDebugState(CurrentConfiguration.Debug)
-
+func initializeWebinterface() {
 	http.HandleFunc("/status", handleStatus)
 	http.HandleFunc("/favicon.ico", handleFavicon)
         http.HandleFunc("/", httpHandler)
 
-	logger.Info("Listening on port: " + strconv.Itoa(CurrentConfiguration.TlsPort) + " (https)")
-	tlserr := http.ListenAndServeTLS(":" + strconv.Itoa(CurrentConfiguration.TlsPort), CurrentConfiguration.TlsCert, CurrentConfiguration.TlsKey, nil)
+	if CurrentConfiguration.HttpTlsPort != 0 {
+		logger.Info("Listening on port: " + strconv.Itoa(CurrentConfiguration.HttpTlsPort) + " (https)")
+		tlserr := http.ListenAndServeTLS(":" + strconv.Itoa(CurrentConfiguration.HttpTlsPort), CurrentConfiguration.HttpTlsCert, CurrentConfiguration.HttpTlsKey, nil)
+		if tlserr != nil {
+			logger.Error("Error starting TLS: ",tlserr)
+		}
 
-	if tlserr != nil {
-		logger.Error("Error starting TLS: ",tlserr)
 	}
 
-	logger.Error("Error happend while serving website")
+	if CurrentConfiguration.HttpPort != 0 {
+		logger.Info("Listening on port: " + strconv.Itoa(CurrentConfiguration.HttpPort) + " (http)")
+		err := http.ListenAndServe(":" + strconv.Itoa(CurrentConfiguration.HttpPort),nil)
+		if err != nil {
+			logger.Error("Error starting http: ", err)
+		}
+	}
+
+	logger.Error("Error happend while serving the webinterface")
 }

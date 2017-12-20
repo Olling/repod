@@ -1,0 +1,6 @@
+{
+	"Name": "yum",
+	"FriendlyName": "Yum Repository",
+	"Description": "This is a test yum repository channel"
+	"Cron": "Not implemented"
+}
