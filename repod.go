@@ -4,35 +4,12 @@ import (
 	//"os"
 	//"sync"
 	//"time"
-	"errors"
 	"strconv"
-	"os/exec"
 	"net/http"
 	//"os/signal"
 	"github.com/olling/logger"
 	//"github.com/olling/repod/conf"
 )
-
-
-func runAction(a Action) (err error) {
-	logger.Debug("Calling ActionChild: ", a)
-
-	if a.Enabled == false {
-		logger.Error("The ActionChild is disabled")
-		return errors.New("The ActionChild is disabled and will not be executed")
-	}
-
-	cmd := exec.Command("/bin/bash", "-c", a.Command)
-	output, err := cmd.CombinedOutput()
-
-	if err != nil {
-		logger.Error(err)
-		return err
-	}
-
-	logger.Debug("Script output:", string(output))
-	return err
-}
 
 
 //func initializeInterupt(threadcount int, serverlistCannel chan string) (<-chan os.Signal, *sync.WaitGroup) {
@@ -87,16 +64,20 @@ func main() {
 
 	initializeCron()
 
-	var test Action
-	test.Cron = "@every 3s"
-	test.StartCron()
-
-	var test2 Action
-	test2.Cron ="@every 4s"
-	test2.StartCron()
+	//	var test Action
+	//	test.Cron = "@every 3s"
+	//	test.StartCron()
+	//
+	//	var test2 Action
+	//	test2.Cron ="@every 4s"
+	//	test2.StartCron()
 
 	initializeApi()
 	initializeWebinterface()
+
+	logger.Debug("here")
+	actions,_ := LoadActionsFromPath(CurrentConfiguration.PathWork)
+	StartCrons(actions)
 
 	if CurrentConfiguration.HttpTlsPort != 0 {
 		logger.Info("Listening on port: " + strconv.Itoa(CurrentConfiguration.HttpTlsPort) + " (https)")
@@ -106,7 +87,7 @@ func main() {
 
 	if CurrentConfiguration.HttpPort != 0 {
 		logger.Info("Listening on port: " + strconv.Itoa(CurrentConfiguration.HttpPort) + " (http)")
-		go http.ListenAndServe(":" + strconv.Itoa(CurrentConfiguration.HttpPort),nil)
+		http.ListenAndServe(":" + strconv.Itoa(CurrentConfiguration.HttpPort),nil)
 	}
 
 	logger.Error("Error happend while serving website")

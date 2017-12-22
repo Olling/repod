@@ -5,7 +5,7 @@ import (
 	"fmt"
 	//"time"
 	"strings"
-	"strconv"
+	//"strconv"
 	"net/http"
 //	"io/ioutil"
 	"github.com/olling/logger"
@@ -131,23 +131,16 @@ func initializeWebinterface() {
 	http.HandleFunc("/status", handleStatus)
 	http.HandleFunc("/favicon.ico", handleFavicon)
         http.HandleFunc("/", httpHandler)
-
-	if CurrentConfiguration.HttpTlsPort != 0 {
-		logger.Info("Listening on port: " + strconv.Itoa(CurrentConfiguration.HttpTlsPort) + " (https)")
-		tlserr := http.ListenAndServeTLS(":" + strconv.Itoa(CurrentConfiguration.HttpTlsPort), CurrentConfiguration.HttpTlsCert, CurrentConfiguration.HttpTlsKey, nil)
-		if tlserr != nil {
-			logger.Error("Error starting TLS: ",tlserr)
-		}
-
-	}
-
-	if CurrentConfiguration.HttpPort != 0 {
-		logger.Info("Listening on port: " + strconv.Itoa(CurrentConfiguration.HttpPort) + " (http)")
-		err := http.ListenAndServe(":" + strconv.Itoa(CurrentConfiguration.HttpPort),nil)
-		if err != nil {
-			logger.Error("Error starting http: ", err)
-		}
-	}
-
-	logger.Error("Error happend while serving the webinterface")
+//
+//	if CurrentConfiguration.HttpTlsPort != 0 {
+//		logger.Info("Listening on port: " + strconv.Itoa(CurrentConfiguration.HttpTlsPort) + " (https)")
+//		go http.ListenAndServeTLS(":" + strconv.Itoa(CurrentConfiguration.HttpTlsPort), CurrentConfiguration.HttpTlsCert, CurrentConfiguration.HttpTlsKey, nil)
+//	}
+//
+//
+//	if CurrentConfiguration.HttpPort != 0 {
+//		logger.Info("Listening on port: " + strconv.Itoa(CurrentConfiguration.HttpPort) + " (http)")
+//		go http.ListenAndServe(":" + strconv.Itoa(CurrentConfiguration.HttpPort),nil)
+//	}
+//	logger.Error("Error happend while serving the webinterface")
 }
